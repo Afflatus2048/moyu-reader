@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>moyu-project - Visual Studio Code</title>
+    <link rel="stylesheet" href="/static/css/vscode.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23007acc' width='100' height='100'/><text x='50' y='68' font-size='60' text-anchor='middle' fill='white'>VS</text></svg>">
+</head>
+<body>
+    <!-- Title Bar -->
+    <div class="titlebar">
+        <div class="titlebar-menu">
+            <span class="menu-item">File</span>
+            <span class="menu-item">Edit</span>
+            <span class="menu-item">Selection</span>
+            <span class="menu-item">View</span>
+            <span class="menu-item">Go</span>
+            <span class="menu-item">Run</span>
+            <span class="menu-item">Terminal</span>
+            <span class="menu-item">Help</span>
+        </div>
+        <div class="titlebar-title">moyu-project - Visual Studio Code</div>
+        <div class="titlebar-controls">
+            <span class="ctrl-btn minimize">─</span>
+            <span class="ctrl-btn maximize">□</span>
+            <span class="ctrl-btn close">✕</span>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+        <!-- Activity Bar -->
+        <div class="activitybar">
+            <div class="activity-icon active" title="Explorer"><svg width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" d="M14 4H8l-1-2H2v12h12V4zm-1 9H3V3h3.5l1 2H13v8z"/></svg></div>
+            <div class="activity-icon" title="Search"><svg width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" d="M11.42 10.08l2.5 2.5-1.42 1.42-2.5-2.5A5.5 5.5 0 106.5 12a5.5 5.5 0 004.92-1.92zM6.5 11a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"/></svg></div>
+            <div class="activity-icon" title="Source Control"><svg width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" d="M14 1H2L1 2v12l1 1h12l1-1V2l-1-1zm0 12H2V2h12v11z"/></svg></div>
+            <div class="activity-icon" title="Run"><svg width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" d="M10.5 8L5 4v8l5.5-4z"/></svg></div>
+            <div class="activity-icon" title="Extensions"><svg width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" d="M13.5 2h-3l-.5.5v3l.5.5h3l.5-.5v-3l-.5-.5zM10 5V3h3v2h-3zM13.5 9h-3l-.5.5v3l.5.5h3l.5-.5v-3l-.5-.5zM10 12v-2h3v2h-3zM6.5 2h-3L3 2.5v3l.5.5h3l.5-.5v-3L6.5 2zM3 5V3h3v2H3zM6.5 9h-3L3 9.5v3l.5.5h3l.5-.5v-3l-.5-.5zM3 12v-2h3v2H3z"/></svg></div>
+            <div class="activity-spacer"></div>
+            <div class="activity-icon bottom" title="Accounts"><svg width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a3 3 0 100 6 3 3 0 000-6zm0 5a2 2 0 110-4 2 2 0 010 4zm4.5 8.5h-9a.5.5 0 01-.5-.5v-1a4 4 0 014-4h2a4 4 0 014 4v1a.5.5 0 01-.5.5zM3 14h10v-.5a3 3 0 00-3-3H6a3 3 0 00-3 3v.5z"/></svg></div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span>EXPLORER</span>
+                <span class="sidebar-actions">···</span>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <span class="collapse-arrow">▾</span>
+                    <span>MOYU-PROJECT</span>
+                </div>
+                <div class="file-tree" id="file-tree">
+                    <!-- Populated by JS -->
+                    <div class="tree-empty">Press Ctrl+Shift+P to load a book</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Editor Area -->
+        <div class="editor-area">
+            <!-- Breadcrumbs -->
+            <div class="breadcrumbs" id="breadcrumbs">
+                <span>src</span>
+                <span>›</span>
+                <span>chapters</span>
+                <span>›</span>
+                <span id="breadcrumb-file">welcome.py</span>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs-bar" id="tabs-bar">
+                <div class="tab active" id="tab-welcome">
+                    <span class="tab-icon">🐍</span>
+                    <span class="tab-name">welcome.py</span>
+                    <span class="tab-close">✕</span>
+                </div>
+            </div>
+
+            <!-- Editor Content -->
+            <div class="editor-content" id="editor-content">
+                <div class="editor-scroll" id="editor-scroll">
+                    <div class="code-lines" id="code-lines">
+                        <div class="code-line">
+                            <span class="line-number">1</span>
+                            <span class="line-content"><span class="token-comment"># Welcome to MoYu Reader!</span></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">2</span>
+                            <span class="line-content"><span class="token-comment"># Press Ctrl+Shift+P to open command palette,</span></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">3</span>
+                            <span class="line-content"><span class="token-comment"># then type a novel catalog URL to start reading.</span></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">4</span>
+                            <span class="line-content"></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">5</span>
+                            <span class="line-content"><span class="token-keyword">def</span> <span class="token-function">main</span><span class="token-punctuation">():</span></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">6</span>
+                            <span class="line-content"><span class="token-comment"># Enjoy your reading~</span></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">7</span>
+                            <span class="line-content"><span class="token-string">"reading"</span></span>
+                        </div>
+                        <div class="code-line">
+                            <span class="line-number">8</span>
+                            <span class="line-content"><span class="token-keyword">return</span> <span class="token-variable">True</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Bar -->
+            <div class="nav-bar" id="nav-bar">
+                <button class="nav-btn" id="btn-prev" title="Previous chapter (Alt+Left)">◀ Prev</button>
+                <span class="nav-info" id="nav-info"></span>
+                <button class="nav-btn" id="btn-next" title="Next chapter (Alt+Right)">Next ▶</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="statusbar">
+        <div class="status-left">
+            <span class="status-item" id="status-branch">main</span>
+            <span class="status-item" id="status-errors">0 ⚠ 0 ✕</span>
+        </div>
+        <div class="status-right">
+            <span class="status-item" id="status-line">Ln 1, Col 1</span>
+            <span class="status-item">Spaces: 4</span>
+            <span class="status-item">UTF-8</span>
+            <span class="status-item" id="status-lang">Python</span>
+            <span class="status-item" id="status-chapter">0/0 chapters</span>
+            <span class="status-item">🔔</span>
+        </div>
+    </div>
+
+    <!-- Command Palette Overlay -->
+    <div class="palette-overlay" id="palette-overlay">
+        <div class="palette" id="palette">
+            <input type="text" class="palette-input" id="palette-input" placeholder="> Enter novel catalog URL...">
+            <div class="palette-list" id="palette-list">
+                <div class="palette-item" data-action="load">MoYu: Load Novel URL</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
