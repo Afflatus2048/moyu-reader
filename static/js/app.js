@@ -106,18 +106,40 @@ const App = {
     },
 
     renderFileTree(title) {
-        const shortTitle = title.length > 20 ? title.substring(0, 20) + '...' : title;
         let html = `<div class="tree-folder"><span class="tree-folder-icon">▼</span><span class="tree-folder-name">src</span></div>`;
-        html += `<div class="tree-folder"><span class="tree-folder-icon">▼</span><span class="tree-folder-name">chapters</span></div>`;
+        html += `<div class="tree-folder"><span class="tree-folder-icon">▼</span><span class="tree-folder-name">core</span></div>`;
         html += `<div class="tree-files">`;
         for (const ch of this.chapters) {
-            const num = String(ch.index + 1).padStart(2, '0');
-            const fname = `chapter-${num}.py`;
+            const fname = this._chapterFilename(ch.index);
             html += `<div class="tree-file" data-id="${ch.id}" data-name="${ch.name}" onclick="App.loadChapter('${ch.id}')">
                 <span class="tree-file-icon">🐍</span><span class="tree-file-name">${fname}</span></div>`;
         }
         html += `</div>`;
+        // Add some fake project files to make it look real
+        html += `<div class="tree-folder"><span class="tree-folder-icon">▼</span><span class="tree-folder-name">tests</span></div>`;
+        html += `<div class="tree-files" style="color:var(--text-dimmer)">`;
+        html += `<div class="tree-file"><span class="tree-file-icon">🐍</span><span class="tree-file-name">test_main.py</span></div>`;
+        html += `<div class="tree-file"><span class="tree-file-icon">🐍</span><span class="tree-file-name">test_utils.py</span></div>`;
+        html += `</div>`;
+        html += `<div class="tree-file"><span class="tree-file-icon">📄</span><span class="tree-file-name">requirements.txt</span></div>`;
+        html += `<div class="tree-file"><span class="tree-file-icon">📄</span><span class="tree-file-name">config.yaml</span></div>`;
         this.fileTree.innerHTML = html;
+    },
+
+    _chapterFilename(index) {
+        // Real project-style filenames with subtle chapter number
+        const names = [
+            'models', 'handlers', 'utils', 'services',
+            'pipeline', 'parser', 'scheduler', 'processor',
+            'transform', 'validator', 'cache', 'metrics',
+            'serializer', 'middleware', 'adapter', 'client',
+            'repository', 'builder', 'config_loader', 'logger',
+            'auth', 'router', 'db', 'api',
+            'types', 'constants', 'exceptions', 'helpers',
+            'formatter', 'indexer', 'storage', 'queue',
+        ];
+        const num = String(index + 1).padStart(2, '0');
+        return `${names[index % names.length]}_${num}.py`;
     },
 
     async loadChapter(chapterId) {
@@ -331,8 +353,7 @@ const App = {
     },
 
     renderTab(data) {
-        const num = String(data.index + 1).padStart(2, '0');
-        const fname = `chapter-${num}.py`;
+        const fname = this._chapterFilename(data.index);
         const tabsBar = document.getElementById('tabs-bar');
         // Remove old tabs except welcome
         tabsBar.querySelectorAll('.tab:not(#tab-welcome)').forEach(t => t.remove());
