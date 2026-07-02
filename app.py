@@ -83,7 +83,7 @@ def get_chapter(book_id, chapter_id):
     # Disguise - support "code" (default) and "replace" modes
     mode = request.args.get("mode", "code")
     if mode == "replace":
-        lines, lang = disguise_text_replace(data["title"], data["paragraphs"])
+        lines, lang = disguise_chapter(data["title"], data["paragraphs"], replace_words=True)
     else:
         lines, lang = disguise_chapter(data["title"], data["paragraphs"])
 

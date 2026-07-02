@@ -74,11 +74,11 @@ const App = {
     toggleMode() {
         this.mode = this.mode === 'code' ? 'replace' : 'code';
         if (this.mode === 'replace') {
-            this.statusMode.textContent = '📝 Text';
-            this.statusMode.title = 'Click to switch to Code mode';
+            this.statusMode.textContent = '📝 EN';
+            this.statusMode.title = 'Click to switch to pure Code mode';
         } else {
             this.statusMode.textContent = '📝 Code';
-            this.statusMode.title = 'Click to switch to Text Replace mode';
+            this.statusMode.title = 'Click to switch to EN mix mode';
         }
         // Reload current chapter with new mode
         if (this.currentChapterId) {

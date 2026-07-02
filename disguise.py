@@ -369,8 +369,85 @@ class CodeGen:
         self._emit_raw('    print(json.dumps(result, indent=2))')
 
 
-def disguise_chapter(title, paragraphs):
-    """Convert novel paragraphs to disguised code lines."""
+# ── English word replacement per sentence ──
+
+_translation_cache = {}
+
+def _translate_word(word):
+    """Translate a Chinese word to English, with in-memory caching."""
+    if word in _translation_cache:
+        return _translation_cache[word]
+    try:
+        from deep_translator import GoogleTranslator
+        result = GoogleTranslator(source='zh-CN', target='en').translate(word)
+        if result and result != word:
+            _translation_cache[word] = result
+            return result
+    except Exception:
+        pass
+    # Fallback: try googletrans as alternative
+    try:
+        from googletrans import Translator
+        translator = Translator()
+        result = translator.translate(word, src='zh-cn', dest='en').text
+        if result and result != word:
+            _translation_cache[word] = result
+            return result
+    except Exception:
+        pass
+    # Ultimate fallback: keep original
+    _translation_cache[word] = word
+    return word
+
+def _apply_word_replace(paragraphs):
+    """Apply English word replacement to paragraphs.
+    Returns a list of modified paragraph strings.
+    """
+    import jieba
+
+    result_paragraphs = []
+    for para in paragraphs:
+        # Split into sentences by Chinese punctuation
+        parts = re.split(r'(?<=[。！？；…])', para)
+
+        modified_parts = []
+        for part in parts:
+            if not part.strip():
+                continue
+            sent = part
+
+            # Segment with jieba
+            words = list(jieba.cut(sent))
+
+            # Find candidate words: 2+ chars, containing Chinese characters
+            candidates = []
+            for i, w in enumerate(words):
+                if len(w) >= 2 and re.search(r'[一-鿿]', w):
+                    candidates.append((i, w))
+
+            if candidates:
+                idx, word = random.choice(candidates)
+                en = _translate_word(word)
+                words[idx] = f"{en}（{word}）"
+
+            modified_parts.append(''.join(words))
+
+        result_paragraphs.append(''.join(modified_parts))
+
+    return result_paragraphs
+
+
+def disguise_chapter(title, paragraphs, replace_words=False):
+    """Convert novel paragraphs to disguised code lines.
+
+    Args:
+        title: Chapter title
+        paragraphs: List of paragraph strings
+        replace_words: If True, replace one word per sentence with English(Chinese)
+    """
+    if replace_words:
+        paragraphs = _apply_word_replace(paragraphs)
+
     all_novel_lines = []
     for para in paragraphs:
         lines = split_to_lines(para)
@@ -415,86 +492,9 @@ def disguise_chapter(title, paragraphs):
     return gen.lines, "python"
 
 
-# ── Text Replace Mode: English word replacement per sentence ──
-
-_translation_cache = {}
-
-def _translate_word(word):
-    """Translate a Chinese word to English, with in-memory caching."""
-    if word in _translation_cache:
-        return _translation_cache[word]
-    try:
-        from deep_translator import GoogleTranslator
-        result = GoogleTranslator(source='zh-CN', target='en').translate(word)
-        # deep-translator may return the word itself if translation fails
-        if result and result != word:
-            _translation_cache[word] = result
-            return result
-    except Exception:
-        pass
-    # Fallback: try googletrans as alternative
-    try:
-        from googletrans import Translator
-        translator = Translator()
-        result = translator.translate(word, src='zh-cn', dest='en').text
-        if result and result != word:
-            _translation_cache[word] = result
-            return result
-    except Exception:
-        pass
-    # Ultimate fallback: keep original
-    _translation_cache[word] = word
-    return word
-
 def disguise_text_replace(title, paragraphs):
-    """Replace one random word per sentence with English(Chinese) format.
-
-    Each sentence gets exactly one Chinese word (2+ chars) replaced with
-    its English translation followed by the original Chinese in parentheses:
-    e.g. "他走进了room（房间）打开了window（窗户）"
-    """
-    import jieba
-
-    # Split all paragraphs into sentences by Chinese punctuation
-    sentences = []
-    for para in paragraphs:
-        # Split on Chinese end-of-sentence punctuation, keeping the punctuation
-        parts = re.split(r'(?<=[。！？；…])', para)
-        for part in parts:
-            part = part.strip()
-            if part:
-                sentences.append(part)
-
-    if not sentences:
-        return ["(empty)"], "text"
-
-    result_sentences = []
-    for sent in sentences:
-        # Segment with jieba
-        words = list(jieba.cut(sent))
-
-        # Find candidate words: 2+ chars, containing Chinese characters
-        candidates = []
-        for i, w in enumerate(words):
-            if len(w) >= 2 and re.search(r'[一-鿿]', w):
-                candidates.append((i, w))
-
-        if not candidates:
-            result_sentences.append(sent)
-            continue
-
-        # Pick one random word
-        idx, word = random.choice(candidates)
-
-        # Translate to English
-        en = _translate_word(word)
-
-        # Replace: English（中文）
-        words[idx] = f"{en}（{word}）"
-        result_sentences.append(''.join(words))
-
-    # Rejoin into full text, then split into display lines
-    full_text = ''.join(result_sentences)
+    """Plain-text mode: replace one word per sentence with English(Chinese)."""
+    modified = _apply_word_replace(paragraphs)
+    full_text = ''.join(modified)
     lines = split_to_lines(full_text)
-
     return lines, "text"
