@@ -6,8 +6,13 @@ const App = {
     currentChapterId: null,
     prevId: null,
     nextId: null,
+    mode: 'code',  // 'code' or 'replace'
 
     init() {
+        // Mode toggle
+        this.statusMode = document.getElementById('status-mode');
+        this.statusMode.addEventListener('click', () => this.toggleMode());
+
         // Command palette
         this.paletteOverlay = document.getElementById('palette-overlay');
         this.paletteInput = document.getElementById('palette-input');
@@ -63,6 +68,21 @@ const App = {
         if (this.paletteOverlay.classList.contains('visible')) {
             this.paletteInput.focus();
             this.paletteInput.value = '';
+        }
+    },
+
+    toggleMode() {
+        this.mode = this.mode === 'code' ? 'replace' : 'code';
+        if (this.mode === 'replace') {
+            this.statusMode.textContent = '📝 Text';
+            this.statusMode.title = 'Click to switch to Code mode';
+        } else {
+            this.statusMode.textContent = '📝 Code';
+            this.statusMode.title = 'Click to switch to Text Replace mode';
+        }
+        // Reload current chapter with new mode
+        if (this.currentChapterId) {
+            this.loadChapter(this.currentChapterId);
         }
     },
 
@@ -153,7 +173,7 @@ const App = {
         if (active) active.classList.add('active');
 
         try {
-            const res = await fetch(`/api/chapter/${this.bookId}/${chapterId}`);
+            const res = await fetch(`/api/chapter/${this.bookId}/${chapterId}?mode=${this.mode}`);
             const data = await res.json();
             if (!data.success) return;
 
@@ -168,13 +188,15 @@ const App = {
 
     renderEditor(data) {
         let html = '';
-        const langMap = {python: 'Python', javascript: 'JavaScript'};
+        const langMap = {python: 'Python', javascript: 'JavaScript', text: 'Plain Text'};
         this.statusLang.textContent = langMap[data.lang] || data.lang;
 
         for (let i = 0; i < data.lines.length; i++) {
             const line = data.lines[i];
             const ln = i + 1;
-            const highlighted = this.highlightLine(line, data.lang);
+            const highlighted = data.lang === 'text'
+                ? this.highlightTextLine(line)
+                : this.highlightLine(line, data.lang);
             html += `<div class="code-line">
                 <span class="line-number">${ln}</span>
                 <span class="line-content">${highlighted}</span></div>`;
@@ -350,6 +372,18 @@ const App = {
 
     escapeHtml(s) {
         return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    },
+
+    highlightTextLine(line) {
+        // Highlight English（中文）patterns in text mode
+        if (!line) return '';
+        // Pattern: ASCII word followed by （Chinese chars）
+        const escaped = this.escapeHtml(line);
+        const highlighted = escaped.replace(
+            /([\wÀ-ɏ]+)（([一-鿿＀-￯　-〿·]+)）/g,
+            '<span class="token-string">$1</span><span class="token-comment">（$2）</span>'
+        );
+        return highlighted;
     },
 
     renderTab(data) {

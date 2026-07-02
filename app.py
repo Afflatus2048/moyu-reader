@@ -5,7 +5,7 @@ from flask import Flask, render_template, request, jsonify
 from scraper import (fetch_page, parse_toc, extract_book_id,
                      load_toc_cache, save_toc_cache,
                      get_or_fetch_chapter)
-from disguise import disguise_chapter
+from disguise import disguise_chapter, disguise_text_replace
 from config import HOST, PORT
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
@@ -80,8 +80,12 @@ def get_chapter(book_id, chapter_id):
     if not data or not data["paragraphs"]:
         return jsonify({"success": False, "error": "Failed to fetch chapter content"})
 
-    # Disguise
-    lines, lang = disguise_chapter(data["title"], data["paragraphs"])
+    # Disguise - support "code" (default) and "replace" modes
+    mode = request.args.get("mode", "code")
+    if mode == "replace":
+        lines, lang = disguise_text_replace(data["title"], data["paragraphs"])
+    else:
+        lines, lang = disguise_chapter(data["title"], data["paragraphs"])
 
     prev_id = chapters[idx - 1]["id"] if idx > 0 else None
     next_id = chapters[idx + 1]["id"] if idx < len(chapters) - 1 else None
