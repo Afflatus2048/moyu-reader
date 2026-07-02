@@ -6,7 +6,7 @@ const App = {
     currentChapterId: null,
     prevId: null,
     nextId: null,
-    mode: 'code',  // 'code' or 'replace'
+    mode: 'replace',  // 'code' or 'replace'
 
     init() {
         // Mode toggle

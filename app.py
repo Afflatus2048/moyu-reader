@@ -81,7 +81,7 @@ def get_chapter(book_id, chapter_id):
         return jsonify({"success": False, "error": "Failed to fetch chapter content"})
 
     # Disguise - support "code" (default) and "replace" modes
-    mode = request.args.get("mode", "code")
+    mode = request.args.get("mode", "replace")
     if mode == "replace":
         lines, lang = disguise_chapter(data["title"], data["paragraphs"], replace_words=True)
     else:
