@@ -219,15 +219,24 @@ def save_toc_cache(book_id, toc):
 def load_chapter_cache(book_id, chapter_id):
     path = os.path.join(_book_dir(book_id), f"{chapter_id}.json")
     if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            # Corrupt cache (e.g. partial write) — delete and re-fetch
+            try: os.remove(path)
+            except: pass
+            return None
     return None
 
 def save_chapter_cache(book_id, chapter_id, data):
     path = os.path.join(_book_dir(book_id), f"{chapter_id}.json")
+    tmp = path + ".tmp"
     data["cached_at"] = datetime.now().isoformat()
-    with open(path, "w", encoding="utf-8") as f:
+    # Atomic write: write to temp file first, then rename
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, path)
 
 def get_or_fetch_chapter(book_id, chapter_id, url):
     cached = load_chapter_cache(book_id, chapter_id)

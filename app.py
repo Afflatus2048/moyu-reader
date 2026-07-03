@@ -36,23 +36,53 @@ def _prefetch_book(book_id, chapters, count=5):
         except Exception:
             pass
 
-def _prefetch_ahead(book_id, chapters, current_idx, count=3):
-    """Background prefetch: fetch next N chapters ahead of current position."""
-    for ch in chapters[current_idx + 1 : current_idx + 1 + count]:
+def _sliding_cache(book_id, chapters, current_idx, mode='replace', window=2):
+    """Sliding window cache around current reading position.
+
+    - Raw-cache chapters in [current - window, current + window]
+    - Pre-DISGUISE the immediate next chapter (most likely navigation target)
+    - Delete chapters outside [current - window - 1, current + window]
+      (keep 1 extra behind for back-navigation)
+    """
+    start = max(0, current_idx - window)
+    end = min(len(chapters), current_idx + window + 1)
+
+    # 1. Raw-cache all chapters in window
+    for ch in chapters[start:end]:
         try:
             get_or_fetch_chapter(book_id, ch["id"], ch["url"])
         except Exception:
             pass
 
-def _cleanup_behind(book_id, chapters, current_idx, keep=2):
-    """Remove cached chapters more than `keep` positions behind current reading position."""
-    for ch in chapters[:max(0, current_idx - keep)]:
+    # 2. Pre-disguise the NEXT chapter so "next" nav is instant
+    next_idx = current_idx + 1
+    if next_idx < len(chapters):
+        ch = chapters[next_idx]
         try:
-            path = os.path.join(CACHE_DIR, book_id, f"{ch['id']}.json")
-            if os.path.exists(path):
-                os.remove(path)
+            data = get_or_fetch_chapter(book_id, ch["id"], ch["url"])
+            cache_key = f"disguised_{mode}"
+            if data and (cache_key not in data or not data[cache_key].get("lines")):
+                if mode == "replace":
+                    lines, lang = disguise_chapter(data["title"], data["paragraphs"], replace_words=True)
+                else:
+                    lines, lang = disguise_chapter(data["title"], data["paragraphs"])
+                data[cache_key] = {"lines": lines, "lang": lang}
+                save_chapter_cache(book_id, ch["id"], data)
         except Exception:
             pass
+
+    # 3. Delete chapters outside sliding window
+    delete_before = max(0, current_idx - window - 1)  # keep 1 extra behind
+    delete_after = min(len(chapters), current_idx + window + 1)
+
+    for i, ch in enumerate(chapters):
+        if i < delete_before or i >= delete_after:
+            try:
+                path = os.path.join(CACHE_DIR, book_id, f"{ch['id']}.json")
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
 
 @app.route("/")
 def index():
@@ -124,19 +154,15 @@ def get_chapter(book_id, chapter_id):
             lines, lang = disguise_chapter(data["title"], data["paragraphs"], replace_words=True)
         else:
             lines, lang = disguise_chapter(data["title"], data["paragraphs"])
-        # Cache the disguised output so next visit is instant
+        # Cache the disguised output so next visit is instant (sync to avoid races)
         data[cache_key] = {"lines": lines, "lang": lang}
-        # Save back to disk (fire-and-forget in background)
-        threading.Thread(target=save_chapter_cache, args=(book_id, chapter_id, data), daemon=True).start()
+        save_chapter_cache(book_id, chapter_id, data)
 
     prev_id = chapters[idx - 1]["id"] if idx > 0 else None
     next_id = chapters[idx + 1]["id"] if idx < len(chapters) - 1 else None
 
-    # Prefetch next 3 chapters in background (incremental: cached chapters skip automatically)
-    threading.Thread(target=_prefetch_ahead, args=(book_id, chapters, idx, 3), daemon=True).start()
-
-    # Cleanup cached chapters behind current reading position
-    threading.Thread(target=_cleanup_behind, args=(book_id, chapters, idx, 2), daemon=True).start()
+    # Sliding window cache: raw-cache ±2, pre-disguise next chapter, delete out-of-window
+    threading.Thread(target=_sliding_cache, args=(book_id, chapters, idx, mode), daemon=True).start()
 
     # Extract chapter number from the fetched content title
     chapter_num = _extract_chapter_num(data.get("title", ""))

@@ -380,12 +380,29 @@ class CodeGen:
 
 
 # ── Context-aware word translation ──
-# Translates a SHORT PHRASE (target word + surrounding words) to English,
-# so Google Translate sees context and picks the right meaning.
-# Displays as: English_phrase（中文单词）
+# Two-pass approach:
+# 1. Translate target word alone → en_word
+# 2. Translate short context phrase (word + neighbors) → en_ctx
+# 3. If en_word appears inside en_ctx → confirmed correct, use en_word
+# 4. Otherwise, the word is ambiguous → extract short key word(s) from en_ctx
+# Display format: English（中文词）— always 1-2 words of English
 
 _translation_cache = {}
-MAX_TRANSLATIONS_PER_CHAPTER = 30
+MAX_TRANSLATIONS_PER_CHAPTER = 25
+
+# English function words to strip when extracting key content words
+_FUNCTION_WORDS = {
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'into',
+    'and', 'or', 'but', 'not', 'no', 'this', 'that', 'it', 'as', 'so',
+    'will', 'would', 'could', 'should', 'may', 'might', 'can', 'shall',
+    'has', 'have', 'had', 'do', 'does', 'did', 'very', 'just', 'also',
+    'then', 'if', 'when', 'where', 'how', 'what', 'which', 'who', 'why',
+    'some', 'any', 'all', 'both', 'each', 'every', 'few', 'more', 'most',
+    'other', 'such', 'only', 'own', 'same', 'too', 'about', 'up', 'out',
+    'he', 'she', 'they', 'them', 'their', 'his', 'her', 'its', 'our',
+    'i', 'me', 'my', 'we', 'us', 'you', 'your', 'one', 'two', 'there',
+}
 
 
 def _translate_text(text):
@@ -404,15 +421,74 @@ def _translate_text(text):
     return text
 
 
+def _extract_keyword(en_text):
+    """Extract 1-2 key content words from an English phrase, stripping function words.
+    Preserves meaningful pairs like 'used to', 'going to', etc."""
+    raw_words = [w.strip('.,!?;:()[]"\'') for w in en_text.split()]
+    content = []
+    i = 0
+    while i < len(raw_words):
+        w = raw_words[i]
+        if w.lower() in _FUNCTION_WORDS:
+            # Check if this function word pairs with previous content word
+            if content and w.lower() in ('to',) and i > 0:
+                content[-1] = content[-1] + ' ' + w
+            i += 1
+            continue
+        if len(w) > 1:
+            content.append(w)
+        i += 1
+    if not content:
+        return raw_words[0] if raw_words else en_text
+    return ' '.join(content[:2])
+
+
+def _translate_word_smart(word, context_words, word_idx):
+    """Translate a Chinese word to English, using context to disambiguate.
+
+    1. Translate the word alone
+    2. Translate a short context phrase (word + 1 neighbor each side)
+    3. If solo translation ≤ 2 words: trust it (Google's context rephrase, not wrong)
+    4. If solo is longer AND disagrees with context: fall back to keyword extraction
+    """
+    en_solo = _translate_text(word)
+
+    # Build minimal context phrase
+    start = max(0, word_idx - 1)
+    end = min(len(context_words), word_idx + 2)
+    ctx_phrase = ''.join(context_words[start:end])
+
+    if ctx_phrase == word:
+        # No context available
+        return _extract_keyword(en_solo) if len(en_solo.split()) > 2 else en_solo
+
+    en_ctx = _translate_text(ctx_phrase)
+
+    # If solo translation is short (≤2 words), trust it — Google just rephrased
+    solo_words = en_solo.split()
+    if len(solo_words) <= 2:
+        return en_solo
+
+    # Solo translation is long (3+ words) — check against context
+    if en_solo.lower() in en_ctx.lower() or en_ctx.lower() in en_solo.lower():
+        return _extract_keyword(en_solo)
+
+    # Context disagrees with long solo — extract from context instead
+    kw = _extract_keyword(en_ctx)
+    if kw and len(kw.split()) <= 2:
+        return kw
+    return _extract_keyword(en_solo)
+
+
 def _apply_word_replace(paragraphs):
-    """Replace one word per clause with its context-aware English translation.
+    """Replace one word per clause with context-verified English translation.
 
     For each clause (split by ，。！？；…), picks a random Chinese word,
-    then translates that word TOGETHER WITH its surrounding words as a short
-    context phrase. Google Translate sees the surrounding words and produces
-    the correct meaning for the target word in this specific sentence.
+    translates it alone AND with surrounding context. If the solo translation
+    appears in the context translation, it's used directly. Otherwise the
+    context-informed meaning is used instead.
 
-    Displays as: context_English（target_Chinese_word）
+    Display format: English（中文词）— always 1-2 English words.
     """
     _ensure_jieba()
     import jieba
@@ -425,35 +501,29 @@ def _apply_word_replace(paragraphs):
             part = part.strip()
             if part and len(part) >= 6:
                 words = list(jieba.cut(part))
-                # Find candidate words: 2+ chars, contains Chinese
                 candidates = [(i, w) for i, w in enumerate(words)
                               if len(w) >= 2 and re.search(r'[一-鿿]', w)]
                 if candidates:
-                    clauses.append((para, part, words, candidates))
+                    clauses.append((para, words, candidates))
 
     if not clauses:
         return paragraphs[:]
 
-    # Shuffle to distribute translations across the chapter
     random.shuffle(clauses)
     selected = clauses[:MAX_TRANSLATIONS_PER_CHAPTER]
 
-    # For each selected clause: pick a word, translate with context
-    replacements = []  # (paragraph, target_word, english_result)
-    for para, part, words, candidates in selected:
+    # Translate each selected word with context verification
+    replacements = []
+    for para, words, candidates in selected:
         idx, word = random.choice(candidates)
-        # Build context phrase: 1 word before + target + 1 word after
-        start = max(0, idx - 1)
-        end = min(len(words), idx + 2)
-        context_phrase = ''.join(words[start:end])
-        en = _translate_text(context_phrase)
-        if en and en != context_phrase:
+        en = _translate_word_smart(word, words, idx)
+        if en and en != word:
             replacements.append((para, word, en))
 
     if not replacements:
         return paragraphs[:]
 
-    # Group replacements by paragraph index
+    # Group by paragraph, sort by word length descending
     by_para = {}
     for para, word, en in replacements:
         for i, p in enumerate(paragraphs):
@@ -461,7 +531,6 @@ def _apply_word_replace(paragraphs):
                 by_para.setdefault(i, []).append((word, en))
                 break
 
-    # Apply replacements (sort each group by word length descending)
     result = paragraphs[:]
     for i, reps in by_para.items():
         para = result[i]
