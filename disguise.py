@@ -11,7 +11,6 @@ def _ensure_jieba():
     global _jieba_loaded
     if not _jieba_loaded:
         import jieba
-        # Force dictionary load by doing a dummy segmentation
         jieba.cut("初始化")
         _jieba_loaded = True
 
@@ -380,67 +379,99 @@ class CodeGen:
         self._emit_raw('    print(json.dumps(result, indent=2))')
 
 
-# ── English word replacement per sentence ──
+# ── Context-aware word translation ──
+# Translates a SHORT PHRASE (target word + surrounding words) to English,
+# so Google Translate sees context and picks the right meaning.
+# Displays as: English_phrase（中文单词）
 
 _translation_cache = {}
-MAX_TRANSLATIONS_PER_CHAPTER = 50  # cap to avoid excessive API calls
+MAX_TRANSLATIONS_PER_CHAPTER = 30
 
-def _translate_word(word):
-    """Translate a Chinese word to English, with in-memory caching and timeout."""
-    if word in _translation_cache:
-        return _translation_cache[word]
+
+def _translate_text(text):
+    """Translate text via Google Translate, with in-memory caching."""
+    if text in _translation_cache:
+        return _translation_cache[text]
     try:
         from deep_translator import GoogleTranslator
-        result = GoogleTranslator(source='zh-CN', target='en').translate(word)
-        if result and result != word:
-            _translation_cache[word] = result
-            return result
+        result = GoogleTranslator(source='zh-CN', target='en').translate(text)
+        if result and result != text and len(result.strip()) > 0:
+            _translation_cache[text] = result.strip()
+            return _translation_cache[text]
     except Exception:
         pass
-    # Fallback: keep original (skip googletrans to avoid double latency)
-    _translation_cache[word] = word
-    return word
+    _translation_cache[text] = text
+    return text
+
 
 def _apply_word_replace(paragraphs):
-    """Apply English word replacement to paragraphs.
-    Returns a list of modified paragraph strings.
+    """Replace one word per clause with its context-aware English translation.
+
+    For each clause (split by ，。！？；…), picks a random Chinese word,
+    then translates that word TOGETHER WITH its surrounding words as a short
+    context phrase. Google Translate sees the surrounding words and produces
+    the correct meaning for the target word in this specific sentence.
+
+    Displays as: context_English（target_Chinese_word）
     """
     _ensure_jieba()
     import jieba
 
-    translation_count = 0
-
-    result_paragraphs = []
+    # Collect all clauses with their word segmentations
+    clauses = []
     for para in paragraphs:
-        # Split into sentences by Chinese punctuation
-        parts = re.split(r'(?<=[。！？；…])', para)
-
-        modified_parts = []
+        parts = re.split(r'(?<=[，。！？；…])', para)
         for part in parts:
-            if not part.strip():
-                continue
-            sent = part
+            part = part.strip()
+            if part and len(part) >= 6:
+                words = list(jieba.cut(part))
+                # Find candidate words: 2+ chars, contains Chinese
+                candidates = [(i, w) for i, w in enumerate(words)
+                              if len(w) >= 2 and re.search(r'[一-鿿]', w)]
+                if candidates:
+                    clauses.append((para, part, words, candidates))
 
-            # Segment with jieba
-            words = list(jieba.cut(sent))
+    if not clauses:
+        return paragraphs[:]
 
-            # Find candidate words: 2+ chars, containing Chinese characters
-            candidates = []
-            for i, w in enumerate(words):
-                if len(w) >= 2 and re.search(r'[一-鿿]', w):
-                    candidates.append((i, w))
+    # Shuffle to distribute translations across the chapter
+    random.shuffle(clauses)
+    selected = clauses[:MAX_TRANSLATIONS_PER_CHAPTER]
 
-            if candidates and translation_count < MAX_TRANSLATIONS_PER_CHAPTER:
-                idx, word = random.choice(candidates)
-                en = _translate_word(word)
-                words[idx] = f"{en}（{word}）"
-                translation_count += 1
+    # For each selected clause: pick a word, translate with context
+    replacements = []  # (paragraph, target_word, english_result)
+    for para, part, words, candidates in selected:
+        idx, word = random.choice(candidates)
+        # Build context phrase: 1 word before + target + 1 word after
+        start = max(0, idx - 1)
+        end = min(len(words), idx + 2)
+        context_phrase = ''.join(words[start:end])
+        en = _translate_text(context_phrase)
+        if en and en != context_phrase:
+            replacements.append((para, word, en))
 
-            modified_parts.append(''.join(words))
+    if not replacements:
+        return paragraphs[:]
 
-        result_paragraphs.append(''.join(modified_parts))
+    # Group replacements by paragraph index
+    by_para = {}
+    for para, word, en in replacements:
+        for i, p in enumerate(paragraphs):
+            if p is para:
+                by_para.setdefault(i, []).append((word, en))
+                break
 
-    return result_paragraphs
+    # Apply replacements (sort each group by word length descending)
+    result = paragraphs[:]
+    for i, reps in by_para.items():
+        para = result[i]
+        reps.sort(key=lambda x: -len(x[0]))
+        for word, en in reps:
+            if word in para:
+                para = para.replace(word, f"{en}（{word}）", 1)
+        result[i] = para
+
+    return result
 
 
 def disguise_chapter(title, paragraphs, replace_words=False):

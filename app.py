@@ -4,7 +4,7 @@ import os, threading
 from flask import Flask, render_template, request, jsonify
 from scraper import (fetch_page, parse_toc, extract_book_id,
                      load_toc_cache, save_toc_cache,
-                     get_or_fetch_chapter)
+                     get_or_fetch_chapter, save_chapter_cache)
 from disguise import disguise_chapter, disguise_text_replace
 from config import HOST, PORT, CACHE_DIR
 
@@ -112,11 +112,22 @@ def get_chapter(book_id, chapter_id):
         return jsonify({"success": False, "error": "Failed to fetch chapter content"})
 
     # Disguise - support "code" (default) and "replace" modes
+    # Check if disguised output is already cached (major speedup on revisit)
     mode = request.args.get("mode", "replace")
-    if mode == "replace":
-        lines, lang = disguise_chapter(data["title"], data["paragraphs"], replace_words=True)
+    cache_key = f"disguised_{mode}"
+
+    if cache_key in data and data[cache_key].get("lines"):
+        lines = data[cache_key]["lines"]
+        lang = data[cache_key]["lang"]
     else:
-        lines, lang = disguise_chapter(data["title"], data["paragraphs"])
+        if mode == "replace":
+            lines, lang = disguise_chapter(data["title"], data["paragraphs"], replace_words=True)
+        else:
+            lines, lang = disguise_chapter(data["title"], data["paragraphs"])
+        # Cache the disguised output so next visit is instant
+        data[cache_key] = {"lines": lines, "lang": lang}
+        # Save back to disk (fire-and-forget in background)
+        threading.Thread(target=save_chapter_cache, args=(book_id, chapter_id, data), daemon=True).start()
 
     prev_id = chapters[idx - 1]["id"] if idx > 0 else None
     next_id = chapters[idx + 1]["id"] if idx < len(chapters) - 1 else None
