@@ -6,7 +6,7 @@ from scraper import (fetch_page, parse_toc, extract_book_id,
                      load_toc_cache, save_toc_cache,
                      get_or_fetch_chapter)
 from disguise import disguise_chapter, disguise_text_replace
-from config import HOST, PORT
+from config import HOST, PORT, CACHE_DIR
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
@@ -33,6 +33,24 @@ def _prefetch_book(book_id, chapters, count=5):
     for ch in chapters[:count]:
         try:
             get_or_fetch_chapter(book_id, ch["id"], ch["url"])
+        except Exception:
+            pass
+
+def _prefetch_ahead(book_id, chapters, current_idx, count=3):
+    """Background prefetch: fetch next N chapters ahead of current position."""
+    for ch in chapters[current_idx + 1 : current_idx + 1 + count]:
+        try:
+            get_or_fetch_chapter(book_id, ch["id"], ch["url"])
+        except Exception:
+            pass
+
+def _cleanup_behind(book_id, chapters, current_idx, keep=2):
+    """Remove cached chapters more than `keep` positions behind current reading position."""
+    for ch in chapters[:max(0, current_idx - keep)]:
+        try:
+            path = os.path.join(CACHE_DIR, book_id, f"{ch['id']}.json")
+            if os.path.exists(path):
+                os.remove(path)
         except Exception:
             pass
 
@@ -103,10 +121,11 @@ def get_chapter(book_id, chapter_id):
     prev_id = chapters[idx - 1]["id"] if idx > 0 else None
     next_id = chapters[idx + 1]["id"] if idx < len(chapters) - 1 else None
 
-    # Prefetch next chapter in background
-    if next_id:
-        next_ch = chapters[idx + 1]
-        threading.Thread(target=get_or_fetch_chapter, args=(book_id, next_ch["id"], next_ch["url"]), daemon=True).start()
+    # Prefetch next 3 chapters in background (incremental: cached chapters skip automatically)
+    threading.Thread(target=_prefetch_ahead, args=(book_id, chapters, idx, 3), daemon=True).start()
+
+    # Cleanup cached chapters behind current reading position
+    threading.Thread(target=_cleanup_behind, args=(book_id, chapters, idx, 2), daemon=True).start()
 
     # Extract chapter number from the fetched content title
     chapter_num = _extract_chapter_num(data.get("title", ""))

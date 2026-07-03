@@ -24,6 +24,9 @@ const App = {
         this.statusChapter = document.getElementById('status-chapter');
         this.statusLang = document.getElementById('status-lang');
 
+        // Check for saved reading progress
+        this._savedProgress = this._loadProgress();
+
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.shiftKey && e.key === 'P') {
@@ -46,7 +49,13 @@ const App = {
         // Palette input
         this.paletteInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                this.loadBook(this.paletteInput.value.trim());
+                const val = this.paletteInput.value.trim();
+                // If empty and has saved progress, resume
+                if (!val && this._savedProgress) {
+                    this.loadBook(this._savedProgress.bookUrl, this._savedProgress.chapterId);
+                } else if (val) {
+                    this.loadBook(val);
+                }
             }
         });
 
@@ -68,6 +77,13 @@ const App = {
         if (this.paletteOverlay.classList.contains('visible')) {
             this.paletteInput.focus();
             this.paletteInput.value = '';
+            // Show "Continue reading" if saved progress exists
+            const list = document.getElementById('palette-list');
+            if (this._savedProgress && this._savedProgress.bookUrl) {
+                list.innerHTML = `<div class="palette-item" data-action="continue" onclick="App.loadBook('${this._savedProgress.bookUrl}', '${this._savedProgress.chapterId}')">📖 Continue Reading (Chapter ${this._savedProgress.chapterId})</div>`;
+            } else {
+                list.innerHTML = `<div class="palette-item" data-action="load">MoYu: Load Novel URL</div>`;
+            }
         }
     },
 
@@ -90,9 +106,10 @@ const App = {
         this.paletteOverlay.classList.remove('visible');
     },
 
-    async loadBook(url) {
+    async loadBook(url, resumeChapterId) {
         if (!url) return;
         this.paletteInput.disabled = true;
+        this._bookUrl = url;
         try {
             const res = await fetch('/api/book/load', {
                 method: 'POST',
@@ -109,8 +126,11 @@ const App = {
             this.closePalette();
             this.renderFileTree(data.title);
             this.statusChapter.textContent = `0/${data.chapters.length} chapters`;
-            // Auto load first chapter
-            if (data.chapters.length > 0) {
+
+            // Resume from saved chapter if available, else load first chapter
+            if (resumeChapterId && this.chapters.some(c => c.id === resumeChapterId)) {
+                this.loadChapter(resumeChapterId);
+            } else if (data.chapters.length > 0) {
                 this.loadChapter(data.chapters[0].id);
             }
         } catch (e) {
@@ -166,6 +186,8 @@ const App = {
 
     async loadChapter(chapterId) {
         if (!this.bookId) return;
+        // Click guard: skip reload if clicking the same chapter
+        if (chapterId === this.currentChapterId) return;
         this.currentChapterId = chapterId;
 
         // Highlight in file tree
@@ -185,7 +207,29 @@ const App = {
             this.renderTab(data);
             this.updateNav(data);
             this.updateStatus(data);
+
+            // Save reading progress
+            this._saveProgress();
         } catch (e) {}
+    },
+
+    _saveProgress() {
+        if (this.bookId && this.currentChapterId && this._bookUrl) {
+            localStorage.setItem('moyu_progress', JSON.stringify({
+                bookId: this.bookId,
+                chapterId: this.currentChapterId,
+                bookUrl: this._bookUrl,
+                timestamp: Date.now()
+            }));
+        }
+    },
+
+    _loadProgress() {
+        try {
+            const raw = localStorage.getItem('moyu_progress');
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) { return null; }
     },
 
     renderEditor(data) {
