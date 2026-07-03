@@ -130,7 +130,7 @@ const App = {
         html += `<div class="tree-folder"><span class="tree-folder-icon">▼</span><span class="tree-folder-name">core</span></div>`;
         html += `<div class="tree-files">`;
         for (const ch of this.chapters) {
-            const fname = this._chapterFilename(ch.index);
+            const fname = this._chapterFilename(ch);
             html += `<div class="tree-file" data-id="${ch.id}" data-name="${ch.name}" onclick="App.loadChapter('${ch.id}')">
                 <span class="tree-file-icon">🐍</span><span class="tree-file-name">${fname}</span></div>`;
         }
@@ -146,8 +146,8 @@ const App = {
         this.fileTree.innerHTML = html;
     },
 
-    _chapterFilename(index) {
-        // Real project-style filenames with subtle chapter number
+    _chapterFilename(ch) {
+        // Real project-style filenames with chapter number from name (or fallback to index)
         const names = [
             'models', 'handlers', 'utils', 'services',
             'pipeline', 'parser', 'scheduler', 'processor',
@@ -158,8 +158,10 @@ const App = {
             'types', 'constants', 'exceptions', 'helpers',
             'formatter', 'indexer', 'storage', 'queue',
         ];
-        const num = String(index + 1).padStart(2, '0');
-        return `${names[index % names.length]}_${num}.py`;
+        // Use extracted chapter number from name if available, else fall back to index
+        const displayNum = ch.num || (ch.index + 1);
+        const num = String(displayNum).padStart(2, '0');
+        return `${names[ch.index % names.length]}_${num}.py`;
     },
 
     async loadChapter(chapterId) {
@@ -387,7 +389,9 @@ const App = {
     },
 
     renderTab(data) {
-        const fname = this._chapterFilename(data.index);
+        // Build a chapter-like object for _chapterFilename
+        const chObj = {index: data.index, num: data.chapter_num};
+        const fname = this._chapterFilename(chObj);
         const tabsBar = document.getElementById('tabs-bar');
         // Remove old tabs except welcome
         tabsBar.querySelectorAll('.tab:not(#tab-welcome)').forEach(t => t.remove());

@@ -138,16 +138,17 @@ def parse_chapter(html):
             if not line: continue
             # Skip ad lines
             ad_keywords = ["jiugangbi", "旧钢笔", "dingdian", "顶点", "提供", "免费阅读",
-                           "本章未完", "点击下一页", "手机阅读", "推荐阅读"]
+                           "本章未完", "点击下一页", "手机阅读", "推荐阅读",
+                           "努力为您", "继续阅读", "下一页", "手机用户", "温馨提示"]
             if any(kw in line for kw in ad_keywords): continue
             paragraphs.append(line)
 
-    # Detect next page
+    # Detect next page: ONLY explicit sub-page URL patterns (_2.html, _3.html, etc.)
+    # "下一页" text links usually go to the NEXT CHAPTER, not a sub-page — skip those
     next_page_url = None
     for a in soup.select("a"):
         href = a.get("href", "")
-        text_a = a.text.strip()
-        if "_2" in href or "_3" in href or "下一页" in text_a:
+        if re.search(r'_\d+\.html', href):
             next_page_url = href
             break
 
@@ -156,41 +157,42 @@ def parse_chapter(html):
 # ── Multi-page merge ──
 
 def fetch_chapter_full(url):
-    """Fetch a chapter, merging all pages."""
+    """Fetch a chapter, merging only explicit sub-pages (_2.html, _3.html)."""
     all_paragraphs = []
     title = ""
     current_url = url
     page = 1
 
-    while current_url and page <= 20:
+    while current_url and page <= 5:
         html = fetch_page(current_url)
         if not html: break
         parsed = parse_chapter(html)
         if page == 1: title = parsed["title"]
         all_paragraphs.extend(parsed["paragraphs"])
 
+        # Only follow next-page links that are explicit sub-pages (_2, _3, etc.)
+        # Do NOT follow "下一页" text-only links — those go to next chapters on most sites
         np = parsed["next_page_url"]
-        if np:
+        if np and re.search(r'_\d+\.html', np):
             if not np.startswith("http"):
                 np = urljoin(current_url, np)
             current_url = np
             page += 1
-        else:
-            # Try predicting _2.html
-            if page == 1:
-                predict = url.replace(".html", "_2.html")
+        elif page == 1:
+            # Only try explicit _2.html URL (not heuristic prediction based on text)
+            predict = url.replace(".html", "_2.html")
+            if predict != url:
                 test_html = fetch_page(predict)
                 if test_html:
                     test_parsed = parse_chapter(test_html)
-                    if test_parsed["paragraphs"]:
+                    if test_parsed["paragraphs"] and len(test_parsed["paragraphs"]) > 0:
                         all_paragraphs.extend(test_parsed["paragraphs"])
-                        # Try _3.html
-                        predict3 = url.replace(".html", "_3.html")
-                        test3 = fetch_page(predict3)
-                        if test3:
-                            p3 = parse_chapter(test3)
-                            if p3["paragraphs"]:
-                                all_paragraphs.extend(p3["paragraphs"])
+                        # Continue with _3.html, _4.html, etc.
+                        current_url = predict
+                        page = 2
+                        continue
+            break
+        else:
             break
 
     return {"title": title, "paragraphs": all_paragraphs}

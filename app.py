@@ -17,6 +17,17 @@ def _skip(name):
     import re
     return bool(re.match(r"^\d+-\d+$", name.strip()))
 
+def _extract_chapter_num(name):
+    """Extract chapter number from name like '第105章' → 105, 'Chapter 42' → 42."""
+    import re
+    # Chinese pattern: 第N章
+    m = re.search(r'第\s*(\d+)\s*章', name)
+    if m: return int(m.group(1))
+    # English pattern: Chapter N
+    m = re.search(r'[Cc]hapter\s+(\d+)', name)
+    if m: return int(m.group(1))
+    return None
+
 def _prefetch_book(book_id, chapters, count=5):
     """Background prefetch: fetch first N chapters."""
     for ch in chapters[:count]:
@@ -54,7 +65,9 @@ def load_book():
         "success": True,
         "book_id": toc["book_id"],
         "title": toc["title"],
-        "chapters": [{"id": c["id"], "name": c["name"], "index": i} for i, c in enumerate(chapters)],
+        "chapters": [{"id": c["id"], "name": c["name"], "index": i,
+                      "num": _extract_chapter_num(c["name"])}
+                     for i, c in enumerate(chapters)],
     })
 
 @app.route("/api/chapter/<book_id>/<chapter_id>")
@@ -95,6 +108,12 @@ def get_chapter(book_id, chapter_id):
         next_ch = chapters[idx + 1]
         threading.Thread(target=get_or_fetch_chapter, args=(book_id, next_ch["id"], next_ch["url"]), daemon=True).start()
 
+    # Extract chapter number from the fetched content title
+    chapter_num = _extract_chapter_num(data.get("title", ""))
+    # Fall back to TOC chapter name extraction
+    if chapter_num is None:
+        chapter_num = _extract_chapter_num(chapter["name"])
+
     return jsonify({
         "success": True,
         "chapter_id": chapter_id,
@@ -103,6 +122,7 @@ def get_chapter(book_id, chapter_id):
         "total": len(chapters),
         "prev_id": prev_id,
         "next_id": next_id,
+        "chapter_num": chapter_num,
         "lines": lines,
         "lang": lang,
     })

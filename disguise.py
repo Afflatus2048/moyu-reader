@@ -4,6 +4,17 @@ import unicodedata, random, re
 
 MAX_LINE_COLS = 76
 
+# Pre-load jieba to avoid per-request dictionary loading lag
+_jieba_loaded = False
+
+def _ensure_jieba():
+    global _jieba_loaded
+    if not _jieba_loaded:
+        import jieba
+        # Force dictionary load by doing a dummy segmentation
+        jieba.cut("初始化")
+        _jieba_loaded = True
+
 # ── Character width ──
 
 def char_width(c):
@@ -372,9 +383,10 @@ class CodeGen:
 # ── English word replacement per sentence ──
 
 _translation_cache = {}
+MAX_TRANSLATIONS_PER_CHAPTER = 50  # cap to avoid excessive API calls
 
 def _translate_word(word):
-    """Translate a Chinese word to English, with in-memory caching."""
+    """Translate a Chinese word to English, with in-memory caching and timeout."""
     if word in _translation_cache:
         return _translation_cache[word]
     try:
@@ -385,17 +397,7 @@ def _translate_word(word):
             return result
     except Exception:
         pass
-    # Fallback: try googletrans as alternative
-    try:
-        from googletrans import Translator
-        translator = Translator()
-        result = translator.translate(word, src='zh-cn', dest='en').text
-        if result and result != word:
-            _translation_cache[word] = result
-            return result
-    except Exception:
-        pass
-    # Ultimate fallback: keep original
+    # Fallback: keep original (skip googletrans to avoid double latency)
     _translation_cache[word] = word
     return word
 
@@ -403,7 +405,10 @@ def _apply_word_replace(paragraphs):
     """Apply English word replacement to paragraphs.
     Returns a list of modified paragraph strings.
     """
+    _ensure_jieba()
     import jieba
+
+    translation_count = 0
 
     result_paragraphs = []
     for para in paragraphs:
@@ -425,10 +430,11 @@ def _apply_word_replace(paragraphs):
                 if len(w) >= 2 and re.search(r'[一-鿿]', w):
                     candidates.append((i, w))
 
-            if candidates:
+            if candidates and translation_count < MAX_TRANSLATIONS_PER_CHAPTER:
                 idx, word = random.choice(candidates)
                 en = _translate_word(word)
                 words[idx] = f"{en}（{word}）"
+                translation_count += 1
 
             modified_parts.append(''.join(words))
 
